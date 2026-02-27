@@ -2,13 +2,18 @@
  * 工作日记数据类型定义
  */
 
+// 会议循环类型
+export type MeetingRecurrence = 'none' | 'daily' | 'weekly' | 'biweekly';
+
 // 会议
 export interface Meeting {
   id: string;
   name: string; // 会议名称
-  time: string; // 时间 (HH:mm)
+  time: string; // 时间 (YYYY-MM-DD HH:mm)
   location: string; // 地点
   completed: boolean; // 是否完成
+  recurrence: MeetingRecurrence; // 循环类型：none-不循环, daily-每日循环, weekly-单周循环, biweekly-双周循环
+  minutes?: string; // 会议纪要（可选）
   createdAt: string;
 }
 
@@ -47,6 +52,7 @@ export interface TodoTask {
   id: string;
   content: string;
   completed: boolean;
+  plannedDate?: string; // 计划完成时间 (YYYY-MM-DD)
   createdAt: string;
 }
 

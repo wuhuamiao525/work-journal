@@ -25,3 +25,7 @@ yarn-error.log*
 *.bat
 push*.sh
 upload*.sh
+
+# Database
+database/*.db
+database/*.db-*

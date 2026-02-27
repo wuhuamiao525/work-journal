@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { Button, Card, List, Checkbox, Space, Popconfirm, message, Empty } from 'antd';
-import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
+import { Button, Card, List, Checkbox, Space, Popconfirm, message, Empty, Tag } from 'antd';
+import { PlusOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import type { TodoProject, TodoTask } from '../types';
 import { generateId } from '../types';
 import TodoModal from '../modals/TodoModal';
+import TodoTaskModal from '../modals/TodoTaskModal';
+import dayjs from 'dayjs';
 
 interface TodoSectionProps {
   todos: TodoProject[];
@@ -15,6 +17,8 @@ const TodoSection: React.FC<TodoSectionProps> = (props) => {
   const [modalVisible, setModalVisible] = useState(false);
   const [modalType, setModalType] = useState<'project' | 'task'>('project');
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
+  const [taskModalVisible, setTaskModalVisible] = useState(false);
+  const [currentTask, setCurrentTask] = useState<{ projectId: string; task: TodoTask } | null>(null);
 
   const handleAddProject = () => {
     setModalType('project');
@@ -23,9 +27,14 @@ const TodoSection: React.FC<TodoSectionProps> = (props) => {
   };
 
   const handleAddTask = (projectId: string) => {
-    setModalType('task');
-    setModalVisible(true);
+    setCurrentTask(null);
     setCurrentProjectId(projectId);
+    setTaskModalVisible(true);
+  };
+
+  const handleEditTask = (projectId: string, task: TodoTask) => {
+    setCurrentTask({ projectId, task });
+    setTaskModalVisible(true);
   };
 
   const handleDeleteProject = (projectId: string) => {
@@ -66,20 +75,32 @@ const TodoSection: React.FC<TodoSectionProps> = (props) => {
         createdAt: new Date().toISOString(),
       };
       onChange([...todos, newProject]);
+    }
+    setModalVisible(false);
+    setCurrentProjectId(null);
+  };
+
+  const handleTaskModalFinish = (task: TodoTask) => {
+    if (currentTask) {
+      // 编辑任务
+      const newTodos = todos.map((tp) =>
+        tp.id === currentTask.projectId
+          ? {
+              ...tp,
+              tasks: tp.tasks.map((t) => (t.id === task.id ? task : t)),
+            }
+          : tp,
+      );
+      onChange(newTodos);
     } else {
       // 新建任务
-      const newTask: TodoTask = {
-        id: generateId(),
-        content: data.content || '',
-        completed: false,
-        createdAt: new Date().toISOString(),
-      };
       const newTodos = todos.map((tp) =>
-        tp.id === currentProjectId ? { ...tp, tasks: [...tp.tasks, newTask] } : tp,
+        tp.id === currentProjectId ? { ...tp, tasks: [...tp.tasks, task] } : tp,
       );
       onChange(newTodos);
     }
-    setModalVisible(false);
+    setTaskModalVisible(false);
+    setCurrentTask(null);
     setCurrentProjectId(null);
   };
 
@@ -138,34 +159,54 @@ const TodoSection: React.FC<TodoSectionProps> = (props) => {
                 ) : (
                   <List
                     dataSource={todoProject.tasks}
-                    renderItem={(task) => (
-                      <List.Item
-                        actions={[
-                          <Popconfirm
-                            key="delete"
-                            title="确定删除这个任务吗？"
-                            onConfirm={() => handleDeleteTask(todoProject.id, task.id)}
-                            okText="确定"
-                            cancelText="取消"
-                          >
-                            <a style={{ color: 'red' }}>删除</a>
-                          </Popconfirm>,
-                        ]}
-                      >
-                        <Checkbox
-                          checked={task.completed}
-                          onChange={(e) =>
-                            handleToggleTask(todoProject.id, task.id, e.target.checked)
-                          }
-                          style={{
-                            textDecoration: task.completed ? 'line-through' : 'none',
-                            color: task.completed ? '#999' : 'inherit',
-                          }}
+                    renderItem={(task) => {
+                      const isOverdue = task.plannedDate && !task.completed &&
+                        dayjs(task.plannedDate).isBefore(dayjs(), 'day');
+                      const isToday = task.plannedDate &&
+                        dayjs(task.plannedDate).isSame(dayjs(), 'day');
+
+                      return (
+                        <List.Item
+                          actions={[
+                            <a key="edit" onClick={() => handleEditTask(todoProject.id, task)}>
+                              <EditOutlined /> 编辑
+                            </a>,
+                            <Popconfirm
+                              key="delete"
+                              title="确定删除这个任务吗？"
+                              onConfirm={() => handleDeleteTask(todoProject.id, task.id)}
+                              okText="确定"
+                              cancelText="取消"
+                            >
+                              <a style={{ color: 'red' }}>删除</a>
+                            </Popconfirm>,
+                          ]}
                         >
-                          {task.content}
-                        </Checkbox>
-                      </List.Item>
-                    )}
+                          <Space style={{ width: '100%' }}>
+                            <Checkbox
+                              checked={task.completed}
+                              onChange={(e) =>
+                                handleToggleTask(todoProject.id, task.id, e.target.checked)
+                              }
+                            />
+                            <span
+                              style={{
+                                textDecoration: task.completed ? 'line-through' : 'none',
+                                color: task.completed ? '#999' : 'inherit',
+                              }}
+                            >
+                              {task.content}
+                            </span>
+                            {task.plannedDate && (
+                              <Tag color={isOverdue ? 'red' : isToday ? 'orange' : 'blue'}>
+                                {isOverdue ? '已逾期 ' : isToday ? '今日 ' : ''}
+                                {task.plannedDate}
+                              </Tag>
+                            )}
+                          </Space>
+                        </List.Item>
+                      );
+                    }}
                   />
                 )}
               </Card>
@@ -182,6 +223,16 @@ const TodoSection: React.FC<TodoSectionProps> = (props) => {
           setCurrentProjectId(null);
         }}
         onFinish={handleModalFinish}
+      />
+      <TodoTaskModal
+        visible={taskModalVisible}
+        task={currentTask?.task || null}
+        onCancel={() => {
+          setTaskModalVisible(false);
+          setCurrentTask(null);
+          setCurrentProjectId(null);
+        }}
+        onFinish={handleTaskModalFinish}
       />
     </>
   );

@@ -3,7 +3,7 @@
  * 负责工作日判断和自动复制昨日数据
  */
 
-import moment from 'moment';
+import dayjs from 'dayjs';
 import type { DailyWorkJournal } from '../types';
 import { generateId } from '../types';
 import { WorkJournalStorage } from './storage';
@@ -14,7 +14,7 @@ export class AutoSyncService {
   /**
    * 判断是否为工作日（周一到周五）
    */
-  static isWorkday(date: moment.Moment): boolean {
+  static isWorkday(date: dayjs.Dayjs): boolean {
     const dayOfWeek = date.day();
     return dayOfWeek >= 1 && dayOfWeek <= 5;
   }
@@ -22,38 +22,47 @@ export class AutoSyncService {
   /**
    * 获取上一个工作日（跳过周末）
    */
-  static getPreviousWorkday(date: moment.Moment): string {
-    let previous = date.clone().subtract(1, 'days');
+  static getPreviousWorkday(date: dayjs.Dayjs): string {
+    let previous = date.subtract(1, 'days');
     while (!this.isWorkday(previous)) {
-      previous.subtract(1, 'days');
+      previous = previous.subtract(1, 'days');
     }
     return previous.format('YYYY-MM-DD');
   }
 
   /**
    * 检查是否需要同步
-   * 条件：工作日 + 9点后 + 今日数据不存在 + 今日未检查过
+   * 条件：工作日 + 0点后（午夜开始） + 今日未同步过
    */
-  static shouldSync(): boolean {
-    const now = moment();
+  static async shouldSync(): Promise<boolean> {
+    const now = dayjs();
     const today = now.format('YYYY-MM-DD');
-    const currentHour = now.hour();
 
-    // 如果今天已经检查过，不再检查
+    // 如果今天已经同步过，不再同步
     if (this.lastCheckDate === today) {
       return false;
     }
 
-    // 只在工作日且时间超过 9:00 时同步
-    if (!this.isWorkday(now) || currentHour < 9) {
+    // 只在工作日时同步（从午夜0点开始）
+    if (!this.isWorkday(now)) {
       return false;
     }
 
-    // 检查今天的数据是否已存在
-    const todayData = WorkJournalStorage.get(today);
+    // 检查今天是否有真实数据（有会议或待办或项目）
+    const todayData = await WorkJournalStorage.get(today);
     if (todayData) {
-      this.lastCheckDate = today;
-      return false; // 今天数据已存在，无需同步
+      const hasData =
+        todayData.meetings.length > 0 ||
+        todayData.todos.length > 0 ||
+        todayData.projects.inProgress.length > 0 ||
+        todayData.projects.delivered.length > 0 ||
+        todayData.projects.accepted.length > 0 ||
+        todayData.diary.trim() !== '';
+
+      if (hasData) {
+        this.lastCheckDate = today;
+        return false; // 今天有真实数据，无需同步
+      }
     }
 
     return true;
@@ -67,22 +76,24 @@ export class AutoSyncService {
    * - 待办：只复制未完成的任务，移除空项目
    * - 日记：不复制
    */
-  static syncFromPreviousDay(): DailyWorkJournal | null {
-    const today = moment().format('YYYY-MM-DD');
-    const previousWorkday = this.getPreviousWorkday(moment());
-    const previousData = WorkJournalStorage.get(previousWorkday);
+  static async syncFromPreviousDay(): Promise<DailyWorkJournal | null> {
+    const today = dayjs().format('YYYY-MM-DD');
+    const previousWorkday = this.getPreviousWorkday(dayjs());
+    const previousData = await WorkJournalStorage.get(previousWorkday);
 
     if (!previousData) {
       return null; // 没有历史数据
     }
 
-    // 复制会议（只保留未完成的）
+    // 复制会议（只保留未完成的，保留循环设置，不复制会议纪要）
     const meetings = previousData.meetings
       .filter((m) => !m.completed)
       .map((m) => ({
         ...m,
         id: generateId(),
         completed: false,
+        recurrence: m.recurrence || 'none', // 保留循环设置
+        minutes: '', // 会议纪要不复制，每个会议独立
         createdAt: new Date().toISOString(),
       }));
 
@@ -105,7 +116,7 @@ export class AutoSyncService {
       })),
     };
 
-    // 复制待办（只保留未完成的任务）
+    // 复制待办（只保留未完成的任务，保留计划完成时间）
     const todos = previousData.todos
       .map((todoProject) => {
         const uncompletedTasks = todoProject.tasks
@@ -114,6 +125,7 @@ export class AutoSyncService {
             ...t,
             id: generateId(),
             completed: false,
+            plannedDate: t.plannedDate, // 保留计划完成时间
             createdAt: new Date().toISOString(),
           }));
 
@@ -136,8 +148,8 @@ export class AutoSyncService {
       lastModified: new Date().toISOString(),
     };
 
-    // 保存到localStorage
-    WorkJournalStorage.save(newData);
+    // 保存到数据库
+    await WorkJournalStorage.save(newData);
     this.lastCheckDate = today;
 
     return newData;
@@ -150,17 +162,19 @@ export class AutoSyncService {
    */
   static startAutoCheck(onSync: (data: DailyWorkJournal) => void): () => void {
     // 立即检查一次
-    if (this.shouldSync()) {
-      const syncedData = this.syncFromPreviousDay();
-      if (syncedData) {
-        onSync(syncedData);
+    (async () => {
+      if (await this.shouldSync()) {
+        const syncedData = await this.syncFromPreviousDay();
+        if (syncedData) {
+          onSync(syncedData);
+        }
       }
-    }
+    })();
 
     // 每分钟检查一次
-    const intervalId = setInterval(() => {
-      if (this.shouldSync()) {
-        const syncedData = this.syncFromPreviousDay();
+    const intervalId = setInterval(async () => {
+      if (await this.shouldSync()) {
+        const syncedData = await this.syncFromPreviousDay();
         if (syncedData) {
           onSync(syncedData);
         }
@@ -174,8 +188,8 @@ export class AutoSyncService {
   /**
    * 手动触发同步（用于测试或手动复制）
    */
-  static manualSync(): DailyWorkJournal | null {
-    return this.syncFromPreviousDay();
+  static async manualSync(): Promise<DailyWorkJournal | null> {
+    return await this.syncFromPreviousDay();
   }
 
   /**

@@ -1,70 +1,169 @@
 # 每日工作日记系统
 
-一个简洁、高效的本地工作日记管理工具 🚀
+一个基于 React + Express + SQLite 的工作日志管理系统，支持会议安排、项目管理、待办事项和工作日记记录。
 
-## ✨ 功能特性
+## 功能特性
 
-### 1. 会议安排 📅
-- 记录会议名称、时间、地点
-- 标记会议完成状态
-- 支持新建、编辑、删除
+- ✅ **用户认证系统**（JWT Token + bcrypt加密）
+- ✅ **多用户支持**（每个用户独立的数据空间）
+- ✅ 会议安排管理（支持日期时间选择）
+- ✅ 项目人员安排
+- ✅ 交付项目待办管理
+- ✅ 工作日记记录
+- ✅ 数据持久化到 SQLite 数据库
+- ✅ 自动同步昨日未完成任务
+- ✅ LocalStorage 备份机制
 
-### 2. 项目人员安排 👥
-- **三个分类**: 进行中/已交付/已验收
-- **14个字段**: 编号、项目名称、交付节点、人员配置等
-- **Tab 切换**: 方便查看不同状态的项目
+## 技术栈
 
-### 3. 项目待办 ✅
-- 创建项目条目
-- 每个项目可添加多个任务
-- 任务完成状态管理
+### 前端
+- React 18
+- TypeScript
+- Ant Design 5
+- Dayjs
+- Vite
 
-### 4. 工作日记 📝
-- 大文本框记录每日工作
-- 自动保存（1秒防抖）
+### 后端
+- Node.js
+- Express
+- Better-SQLite3
+- JWT (jsonwebtoken)
+- bcrypt (密码加密)
+- CORS
 
-### 5. 自动同步 🔄
-- **工作日早上9点**自动复制昨日未完成内容
-- 自动跳过周末
-- 智能过滤已完成项
+## 安装和运行
 
-## 🚀 快速开始
-
-### 方法 1: 使用启动脚本（推荐）
-
-直接双击运行：`START.bat`
-
-### 方法 2: 手动启动
+### 1. 安装依赖
 
 ```bash
-cd d:\code\work-journal
 npm install
+```
+
+### 2. 初始化管理员账号（首次运行）
+
+```bash
+npm run init-admin
+```
+
+这将创建默认管理员账号：
+- **用户名**: admin
+- **密码**: admin123
+
+⚠️ **重要**：首次登录后请立即修改默认密码！
+
+### 3. 启动后端服务器
+
+```bash
+npm run server
+```
+
+后端服务器将在 `http://localhost:3001` 启动
+
+### 4. 启动前端开发服务器
+
+在另一个终端窗口运行：
+
+```bash
 npm run dev
 ```
 
-访问: `http://localhost:5173`
+前端将在 `http://localhost:5173` 启动
 
-## 💾 数据存储
+### 5. 同时启动前后端（Windows）
 
-- 所有数据存储在浏览器 localStorage
-- 刷新页面数据不会丢失
-- 按日期组织：workJournal_YYYY-MM-DD
+```bash
+npm run dev:all
+```
 
-## 🛠️ 技术栈
+### 6. 访问应用
 
-- React 18 + TypeScript
-- Vite 7
-- Ant Design 5
-- moment.js
+打开浏览器访问 `http://localhost:5173`，使用管理员账号登录。
 
-## 📖 使用说明
+## API 接口
 
-1. 选择日期查看不同日期的工作日记
-2. 所有修改1秒后自动保存
-3. 工作日早上9点后首次打开自动同步昨日数据
+### 认证接口
+- `POST /api/auth/login` - 用户登录
+- `POST /api/auth/register` - 创建新用户（管理员功能）
+- `GET /api/auth/users` - 获取用户列表（管理员功能）
 
----
+### 日志接口（需要认证）
+- `GET /api/journals/:date` - 获取指定日期的工作日志
+- `POST /api/journals` - 保存工作日志
+- `GET /api/journals/dates/all` - 获取所有日期列表
+- `DELETE /api/journals/:date` - 删除指定日期的工作日志
 
-**版本**: 1.0.0 | **更新**: 2026-02-26
-"# work-journal" 
-"# work-journal" 
+### 其他
+- `GET /health` - 健康检查
+
+## 数据存储
+
+### 用户数据
+- **用户信息**: 存储在 SQLite 数据库的 `users` 表
+- **密码**: 使用 bcrypt 加密存储
+
+### 工作日志
+系统采用双重存储机制：
+1. **主存储**：SQLite 数据库（`database/work-journal.db`）
+   - 每个用户的数据完全隔离
+   - 通过 `user_id` 字段关联到具体用户
+2. **备份存储**：LocalStorage（前缀：`workJournal_backup_`）
+   - 当 API 请求失败时自动降级
+   - 用户切换后自动清理
+
+## 安全性
+
+- ✅ 密码使用 bcrypt 加密（bcrypt rounds: 10）
+- ✅ JWT Token 认证（7天有效期）
+- ✅ 用户数据完全隔离
+- ✅ API 请求需要携带有效 Token
+- ✅ Token 存储在 localStorage
+
+## 用户管理
+
+### 创建新用户
+
+使用管理员账号登录后，可以通过API创建新用户：
+
+```bash
+curl -X POST http://localhost:3001/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username":"newuser","password":"password123","displayName":"新用户"}'
+```
+
+### 修改密码
+
+目前需要通过数据库直接操作，或者重新创建用户。
+
+## 数据库架构
+
+### users 表
+```sql
+CREATE TABLE users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  username TEXT UNIQUE NOT NULL,
+  password TEXT NOT NULL,
+  display_name TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+)
+```
+
+### work_journals 表
+```sql
+CREATE TABLE work_journals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  date TEXT NOT NULL,
+  meetings TEXT NOT NULL,
+  projects TEXT NOT NULL,
+  todos TEXT NOT NULL,
+  diary TEXT NOT NULL,
+  last_modified TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  UNIQUE(user_id, date)
+)
+```
+
+## License
+
+MIT
