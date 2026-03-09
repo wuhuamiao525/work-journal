@@ -22,20 +22,77 @@ interface WorkJournalProps {
   onLogout: () => void;
 }
 
+// 加载未来的循环会议
+const loadUpcomingRecurringMeetings = async (currentDate: string) => {
+  const today = dayjs(currentDate);
+  const upcomingMeetings: any[] = [];
+
+  // 查找从今天往后30天内的所有未完成循环会议
+  for (let i = 0; i <= 30; i++) {
+    const futureDate = today.add(i, 'days').format('YYYY-MM-DD');
+    const futureData = await WorkJournalStorage.get(futureDate);
+
+    if (!futureData) continue;
+
+    for (const meeting of futureData.meetings) {
+      // 只显示未完成的循环会议，且会议时间在未来
+      if (!meeting.recurrence || meeting.recurrence === 'none' || meeting.completed) {
+        continue;
+      }
+
+      const meetingTime = dayjs(meeting.time);
+      const now = dayjs();
+
+      // 如果会议时间在当前时间之后，添加到列表
+      if (meetingTime.isAfter(now)) {
+        upcomingMeetings.push(meeting);
+      }
+    }
+  }
+
+  return upcomingMeetings;
+};
+
 const WorkJournal: React.FC<WorkJournalProps> = ({ onLogout }) => {
   const [currentDate, setCurrentDate] = useState(dayjs().format('YYYY-MM-DD'));
   const [journalData, setJournalData] = useState<DailyWorkJournal | null>(null);
   const [saveTimer, setSaveTimer] = useState<NodeJS.Timeout | null>(null);
+  const [isInitialLoad, setIsInitialLoad] = useState(true); // 标记是否是初始加载
 
   // 加载数据
   const loadData = useCallback(async () => {
     try {
+      setIsInitialLoad(true); // 标记为初始加载，防止触发自动保存
+
       let data = await WorkJournalStorage.get(currentDate);
       if (!data) {
-        // 创建空数据（不立即保存，给自动同步一次机会）
+        // 如果没有数据，创建空数据但不立即保存到数据库
         data = WorkJournalStorage.createEmptyDaily(currentDate);
+        console.log('[工作日记] 没有数据，创建空结构（仅内存，不保存）');
+      } else {
+        console.log('[工作日记] 加载到数据:', {
+          会议: data.meetings?.length || 0,
+          项目: (data.projects?.inProgress?.length || 0) + (data.projects?.delivered?.length || 0) + (data.projects?.accepted?.length || 0),
+          待办: data.todos?.length || 0
+        });
       }
+
+      // 加载未来的循环会议（从今天往后30天内）
+      const upcomingRecurringMeetings = await loadUpcomingRecurringMeetings(currentDate);
+      if (upcomingRecurringMeetings.length > 0) {
+        console.log('[工作日记] 加载到未来循环会议:', upcomingRecurringMeetings.length, '个');
+        // 合并到当前数据，避免重复
+        const existingIds = new Set(data.meetings.map(m => `${m.name}-${m.time}`));
+        const newMeetings = upcomingRecurringMeetings.filter(
+          m => !existingIds.has(`${m.name}-${m.time}`)
+        );
+        data.meetings = [...data.meetings, ...newMeetings];
+      }
+
       setJournalData(data);
+
+      // 延迟重置标记，确保 useEffect 不会在初始加载时触发保存
+      setTimeout(() => setIsInitialLoad(false), 100);
     } catch (error) {
       console.error('Failed to load data:', error);
       message.error('加载数据失败');
@@ -44,30 +101,31 @@ const WorkJournal: React.FC<WorkJournalProps> = ({ onLogout }) => {
 
   // 保存数据（防抖）
   const saveData = useCallback(async () => {
-    if (journalData) {
-      try {
-        await WorkJournalStorage.save({
-          ...journalData,
-          lastModified: new Date().toISOString(),
-        });
-      } catch (error) {
-        message.error('保存失败，请检查网络连接');
-      }
+    if (!journalData) return;
+
+    try {
+      await WorkJournalStorage.save(journalData);
+      console.log('[工作日记] 数据已保存');
+    } catch (error) {
+      console.error('[工作日记] 保存失败:', error);
+      message.error('保存失败，请稍后重试');
     }
   }, [journalData]);
 
   // 自动保存（数据变化后 1 秒）
   useEffect(() => {
-    if (journalData) {
-      // 清除之前的定时器
-      if (saveTimer) {
-        clearTimeout(saveTimer);
-      }
-      // 设置新的定时器
-      const timer = setTimeout(saveData, 1000);
-      setSaveTimer(timer);
+    // 如果是初始加载，不触发自动保存
+    if (isInitialLoad || !journalData) {
+      return;
     }
-  }, [journalData]);
+
+    console.log('[工作日记] 数据变化，1秒后自动保存');
+    const timer = setTimeout(() => {
+      saveData();
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [journalData, saveData, isInitialLoad]);
 
   // 页面加载时加载数据
   useEffect(() => {
@@ -77,9 +135,11 @@ const WorkJournal: React.FC<WorkJournalProps> = ({ onLogout }) => {
   // 启动自动同步
   useEffect(() => {
     const cleanup = AutoSyncService.startAutoCheck((syncedData) => {
-      message.success('已自动从昨日工作日复制未完成的内容');
+      console.log('[工作日记] 自动同步完成，已复制上一个工作日的数据');
       setJournalData(syncedData);
+      message.success('已自动从上一个工作日同步数据');
     });
+
     return cleanup;
   }, []);
 
@@ -87,22 +147,7 @@ const WorkJournal: React.FC<WorkJournalProps> = ({ onLogout }) => {
   const handleDateChange = async (date: dayjs.Dayjs | null) => {
     if (date) {
       const newDate = date.format('YYYY-MM-DD');
-      // 切换日期前,先立即保存当前日期的数据
-      if (journalData && currentDate !== newDate) {
-        try {
-          await WorkJournalStorage.save({
-            ...journalData,
-            lastModified: new Date().toISOString(),
-          });
-        } catch (error) {
-          console.error('Failed to save before date change:', error);
-        }
-        // 清除防抖定时器
-        if (saveTimer) {
-          clearTimeout(saveTimer);
-          setSaveTimer(null);
-        }
-      }
+      console.log('[工作日记] 切换日期到:', newDate);
       setCurrentDate(newDate);
     }
   };

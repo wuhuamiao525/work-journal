@@ -122,18 +122,36 @@ function getAllUsers() {
 
 // 获取指定用户和日期的工作日志
 function getJournalByDate(userId, date) {
+  // 确保userId是整数
+  const userIdInt = parseInt(userId);
   const stmt = db.prepare('SELECT * FROM work_journals WHERE user_id = ? AND date = ?');
-  const row = stmt.get(userId, date);
+  const row = stmt.get(userIdInt, date);
 
   if (!row) {
     return null;
   }
 
+  // 解析数据（可能需要双重解析，因为数据可能被双重序列化了）
+  let meetings = JSON.parse(row.meetings);
+  let projects = JSON.parse(row.projects);
+  let todos = JSON.parse(row.todos);
+
+  // 如果解析后还是字符串，再解析一次（处理双重序列化的历史数据）
+  if (typeof meetings === 'string') {
+    meetings = JSON.parse(meetings);
+  }
+  if (typeof projects === 'string') {
+    projects = JSON.parse(projects);
+  }
+  if (typeof todos === 'string') {
+    todos = JSON.parse(todos);
+  }
+
   return {
     date: row.date,
-    meetings: JSON.parse(row.meetings),
-    projects: JSON.parse(row.projects),
-    todos: JSON.parse(row.todos),
+    meetings: meetings,
+    projects: projects,
+    todos: todos,
     diary: row.diary,
     lastModified: row.last_modified,
   };

@@ -53,6 +53,7 @@ export interface TodoTask {
   content: string;
   completed: boolean;
   plannedDate?: string; // 计划完成时间 (YYYY-MM-DD)
+  progress?: string; // 任务进展记录
   createdAt: string;
 }
 

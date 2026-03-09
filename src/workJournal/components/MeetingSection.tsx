@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Button, Checkbox, Space, Popconfirm, message, Table, Tag, Badge } from 'antd';
 import { PlusOutlined, FileTextOutlined } from '@ant-design/icons';
 import type { Meeting } from '../types';
 import MeetingModal from '../modals/MeetingModal';
 import MinutesModal from '../modals/MinutesModal';
 import { RecurringMeetingService } from '../services/recurringMeeting';
+import dayjs from 'dayjs';
 
 interface MeetingSectionProps {
   meetings: Meeting[];
@@ -82,6 +83,15 @@ const MeetingSection: React.FC<MeetingSectionProps> = (props) => {
     setMinutesMeeting(null);
   };
 
+  // 对会议按时间升序排序
+  const sortedMeetings = useMemo(() => {
+    return [...meetings].sort((a, b) => {
+      const timeA = dayjs(a.time);
+      const timeB = dayjs(b.time);
+      return timeA.valueOf() - timeB.valueOf(); // 升序：最早的在前面
+    });
+  }, [meetings]);
+
   const getRecurrenceTag = (recurrence: string) => {
     if (recurrence === 'daily') {
       return <Tag color="orange">每日</Tag>;
@@ -91,6 +101,11 @@ const MeetingSection: React.FC<MeetingSectionProps> = (props) => {
       return <Tag color="green">每两周</Tag>;
     }
     return null;
+  };
+
+  // 判断是否是当天的会议
+  const isTodayMeeting = (meetingTime: string) => {
+    return dayjs(meetingTime).isSame(dayjs(), 'day');
   };
 
   const columns = [
@@ -167,10 +182,33 @@ const MeetingSection: React.FC<MeetingSectionProps> = (props) => {
       </div>
       <Table
         columns={columns}
-        dataSource={meetings}
+        dataSource={sortedMeetings}
         rowKey="id"
         pagination={false}
+        rowClassName={(record) => {
+          if (record.completed) {
+            return 'completed-meeting-row';
+          }
+          if (isTodayMeeting(record.time)) {
+            return 'today-meeting-row';
+          }
+          return '';
+        }}
       />
+      <style>{`
+        .today-meeting-row {
+          background-color: #e6f7ff !important;
+        }
+        .today-meeting-row:hover > td {
+          background-color: #bae7ff !important;
+        }
+        .completed-meeting-row {
+          background-color: #f6ffed !important;
+        }
+        .completed-meeting-row:hover > td {
+          background-color: #d9f7be !important;
+        }
+      `}</style>
       <MeetingModal
         visible={modalVisible}
         meeting={currentMeeting}

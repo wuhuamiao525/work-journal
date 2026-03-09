@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { Button, Card, List, Checkbox, Space, Popconfirm, message, Empty, Tag } from 'antd';
-import { PlusOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
+import { Button, Card, List, Checkbox, Space, Popconfirm, message, Empty, Tag, Modal, Input } from 'antd';
+import { PlusOutlined, DeleteOutlined, EditOutlined, FileTextOutlined } from '@ant-design/icons';
 import type { TodoProject, TodoTask } from '../types';
 import { generateId } from '../types';
 import TodoModal from '../modals/TodoModal';
 import TodoTaskModal from '../modals/TodoTaskModal';
 import dayjs from 'dayjs';
+
+const { TextArea } = Input;
 
 interface TodoSectionProps {
   todos: TodoProject[];
@@ -19,6 +21,9 @@ const TodoSection: React.FC<TodoSectionProps> = (props) => {
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [taskModalVisible, setTaskModalVisible] = useState(false);
   const [currentTask, setCurrentTask] = useState<{ projectId: string; task: TodoTask } | null>(null);
+  const [progressModalVisible, setProgressModalVisible] = useState(false);
+  const [currentProgress, setCurrentProgress] = useState<{ projectId: string; task: TodoTask } | null>(null);
+  const [progressInput, setProgressInput] = useState('');
 
   const handleAddProject = () => {
     setModalType('project');
@@ -51,6 +56,35 @@ const TodoSection: React.FC<TodoSectionProps> = (props) => {
     );
     onChange(newTodos);
     message.success('删除成功');
+  };
+
+  const handleOpenProgress = (projectId: string, task: TodoTask) => {
+    setCurrentProgress({ projectId, task });
+    setProgressInput(task.progress || '');
+    setProgressModalVisible(true);
+  };
+
+  const handleSaveProgress = () => {
+    if (!currentProgress) return;
+
+    const newTodos = todos.map((tp) =>
+      tp.id === currentProgress.projectId
+        ? {
+            ...tp,
+            tasks: tp.tasks.map((t) =>
+              t.id === currentProgress.task.id
+                ? { ...t, progress: progressInput }
+                : t
+            ),
+          }
+        : tp
+    );
+
+    onChange(newTodos);
+    setProgressModalVisible(false);
+    setCurrentProgress(null);
+    setProgressInput('');
+    message.success('进展已保存');
   };
 
   const handleToggleTask = (projectId: string, taskId: string, completed: boolean) => {
@@ -127,8 +161,8 @@ const TodoSection: React.FC<TodoSectionProps> = (props) => {
                   <Space>
                     <span style={{ fontSize: 16, fontWeight: 500 }}>{todoProject.name}</span>
                     <span style={{ color: '#999', fontSize: 14 }}>
-                      ({todoProject.tasks.filter((t) => t.completed).length}/
-                      {todoProject.tasks.length})
+                      ({(todoProject.tasks || []).filter((t) => t.completed).length}/
+                      {(todoProject.tasks || []).length})
                     </span>
                   </Space>
                 }
@@ -154,11 +188,18 @@ const TodoSection: React.FC<TodoSectionProps> = (props) => {
                   </Space>
                 }
               >
-                {todoProject.tasks.length === 0 ? (
+                {(todoProject.tasks || []).length === 0 ? (
                   <Empty description="暂无任务" image={Empty.PRESENTED_IMAGE_SIMPLE} />
                 ) : (
                   <List
-                    dataSource={todoProject.tasks}
+                    dataSource={[...(todoProject.tasks || [])].sort((a, b) => {
+                      // 没有计划时间的任务排在最后
+                      if (!a.plannedDate && !b.plannedDate) return 0;
+                      if (!a.plannedDate) return 1;
+                      if (!b.plannedDate) return -1;
+                      // 按计划完成时间升序排序
+                      return dayjs(a.plannedDate).valueOf() - dayjs(b.plannedDate).valueOf();
+                    })}
                     renderItem={(task) => {
                       const isOverdue = task.plannedDate && !task.completed &&
                         dayjs(task.plannedDate).isBefore(dayjs(), 'day');
@@ -168,6 +209,9 @@ const TodoSection: React.FC<TodoSectionProps> = (props) => {
                       return (
                         <List.Item
                           actions={[
+                            <a key="progress" onClick={() => handleOpenProgress(todoProject.id, task)}>
+                              <FileTextOutlined /> 进展
+                            </a>,
                             <a key="edit" onClick={() => handleEditTask(todoProject.id, task)}>
                               <EditOutlined /> 编辑
                             </a>,
@@ -182,26 +226,41 @@ const TodoSection: React.FC<TodoSectionProps> = (props) => {
                             </Popconfirm>,
                           ]}
                         >
-                          <Space style={{ width: '100%' }}>
-                            <Checkbox
-                              checked={task.completed}
-                              onChange={(e) =>
-                                handleToggleTask(todoProject.id, task.id, e.target.checked)
-                              }
-                            />
-                            <span
-                              style={{
-                                textDecoration: task.completed ? 'line-through' : 'none',
-                                color: task.completed ? '#999' : 'inherit',
-                              }}
-                            >
-                              {task.content}
-                            </span>
-                            {task.plannedDate && (
-                              <Tag color={isOverdue ? 'red' : isToday ? 'orange' : 'blue'}>
-                                {isOverdue ? '已逾期 ' : isToday ? '今日 ' : ''}
-                                {task.plannedDate}
-                              </Tag>
+                          <Space direction="vertical" style={{ width: '100%' }}>
+                            <Space>
+                              <Checkbox
+                                checked={task.completed}
+                                onChange={(e) =>
+                                  handleToggleTask(todoProject.id, task.id, e.target.checked)
+                                }
+                              />
+                              <span
+                                style={{
+                                  textDecoration: task.completed ? 'line-through' : 'none',
+                                  color: task.completed ? '#999' : 'inherit',
+                                }}
+                              >
+                                {task.content}
+                              </span>
+                              {task.plannedDate && (
+                                <Tag color={isOverdue ? 'red' : isToday ? 'orange' : 'blue'}>
+                                  {isOverdue ? '已逾期 ' : isToday ? '今日 ' : ''}
+                                  {task.plannedDate}
+                                </Tag>
+                              )}
+                            </Space>
+                            {task.progress && (
+                              <div style={{
+                                paddingLeft: 24,
+                                fontSize: 13,
+                                color: '#666',
+                                background: '#f5f5f5',
+                                padding: '8px 12px 8px 24px',
+                                borderRadius: 4,
+                                whiteSpace: 'pre-wrap'
+                              }}>
+                                <strong>进展：</strong>{task.progress}
+                              </div>
                             )}
                           </Space>
                         </List.Item>
@@ -234,6 +293,31 @@ const TodoSection: React.FC<TodoSectionProps> = (props) => {
         }}
         onFinish={handleTaskModalFinish}
       />
+
+      <Modal
+        title="任务进展"
+        open={progressModalVisible}
+        onOk={handleSaveProgress}
+        onCancel={() => {
+          setProgressModalVisible(false);
+          setCurrentProgress(null);
+          setProgressInput('');
+        }}
+        okText="保存"
+        cancelText="取消"
+        width={600}
+      >
+        <div style={{ marginBottom: 8 }}>
+          <strong>任务：</strong>{currentProgress?.task.content}
+        </div>
+        <TextArea
+          rows={8}
+          placeholder="请输入任务进展..."
+          value={progressInput}
+          onChange={(e) => setProgressInput(e.target.value)}
+          style={{ marginTop: 12 }}
+        />
+      </Modal>
     </>
   );
 };

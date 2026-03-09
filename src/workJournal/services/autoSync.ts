@@ -38,18 +38,29 @@ export class AutoSyncService {
     const now = dayjs();
     const today = now.format('YYYY-MM-DD');
 
+    console.log('[AutoSync] 检查是否需要同步...');
+    console.log('[AutoSync] 当前时间:', now.format('YYYY-MM-DD HH:mm:ss'));
+    console.log('[AutoSync] 今天:', today);
+    console.log('[AutoSync] lastCheckDate:', this.lastCheckDate);
+
     // 如果今天已经同步过，不再同步
     if (this.lastCheckDate === today) {
+      console.log('[AutoSync] ❌ 今天已经同步过，跳过');
       return false;
     }
 
     // 只在工作日时同步（从午夜0点开始）
     if (!this.isWorkday(now)) {
+      console.log('[AutoSync] ❌ 今天不是工作日，跳过');
       return false;
     }
 
+    console.log('[AutoSync] ✅ 今天是工作日');
+
     // 检查今天是否有真实数据（有会议或待办或项目）
     const todayData = await WorkJournalStorage.get(today);
+    console.log('[AutoSync] 今天的数据:', todayData ? '存在' : '不存在');
+
     if (todayData) {
       const hasData =
         todayData.meetings.length > 0 ||
@@ -59,12 +70,21 @@ export class AutoSyncService {
         todayData.projects.accepted.length > 0 ||
         todayData.diary.trim() !== '';
 
+      console.log('[AutoSync] 今天是否有真实数据:', hasData);
+      console.log('[AutoSync] - 会议:', todayData.meetings.length);
+      console.log('[AutoSync] - 待办:', todayData.todos.length);
+      console.log('[AutoSync] - 项目:', todayData.projects.inProgress.length + todayData.projects.delivered.length + todayData.projects.accepted.length);
+
       if (hasData) {
         this.lastCheckDate = today;
+        console.log('[AutoSync] ❌ 今天已有真实数据，跳过同步');
         return false; // 今天有真实数据，无需同步
       }
     }
 
+    // 标记今天已检查，避免重复同步
+    this.lastCheckDate = today;
+    console.log('[AutoSync] ✅ 满足同步条件');
     return true;
   }
 
@@ -79,10 +99,34 @@ export class AutoSyncService {
   static async syncFromPreviousDay(): Promise<DailyWorkJournal | null> {
     const today = dayjs().format('YYYY-MM-DD');
     const previousWorkday = this.getPreviousWorkday(dayjs());
+
+    console.log('[AutoSync] 开始同步...');
+    console.log('[AutoSync] 今天:', today);
+    console.log('[AutoSync] 上一个工作日:', previousWorkday);
+
     const previousData = await WorkJournalStorage.get(previousWorkday);
 
     if (!previousData) {
+      console.log('[AutoSync] ❌ 上一个工作日没有数据');
       return null; // 没有历史数据
+    }
+
+    console.log('[AutoSync] ✅ 找到上一个工作日的数据');
+    console.log('[AutoSync] - 会议数量:', previousData.meetings.length);
+    console.log('[AutoSync] - 待办项目数量:', previousData.todos.length);
+    console.log('[AutoSync] - 项目总数:', previousData.projects.inProgress.length + previousData.projects.delivered.length + previousData.projects.accepted.length);
+
+    // 检查上一个工作日是否有真实数据
+    const hasRealData =
+      previousData.meetings.length > 0 ||
+      previousData.todos.length > 0 ||
+      previousData.projects.inProgress.length > 0 ||
+      previousData.projects.delivered.length > 0 ||
+      previousData.projects.accepted.length > 0;
+
+    if (!hasRealData) {
+      console.log('[AutoSync] ❌ 上一个工作日没有真实数据，跳过同步');
+      return null; // 上一个工作日是空的，不同步空数据
     }
 
     // 复制会议（只保留未完成的，保留循环设置，不复制会议纪要）

@@ -1,0 +1,28 @@
+PRAGMA table_info(work_journals)
+CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT UNIQUE NOT NULL,
+      password TEXT NOT NULL,
+      display_name TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  
+CREATE TABLE IF NOT EXISTS work_journals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      date TEXT NOT NULL,
+      meetings TEXT NOT NULL,
+      projects TEXT NOT NULL,
+      todos TEXT NOT NULL,
+      diary TEXT NOT NULL,
+      last_modified TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      UNIQUE(user_id, date)
+    )
+  
+✅ Database initialized successfully
+✅ Server is running on http://localhost:3001
+📝 API endpoints:
+   - POST http://localhost:3001/api/auth/login
+   - GET  http://localhost:3001/health

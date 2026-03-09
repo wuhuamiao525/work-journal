@@ -104,4 +104,74 @@ export class RecurringMeetingService {
       }
     }
   }
+
+  /**
+   * 获取所有即将到来的循环会议
+   * @param currentDate 当前查看的日期
+   * @returns 应该在当前日期显示的循环会议列表
+   */
+  static async getUpcomingRecurringMeetings(currentDate: string): Promise<Meeting[]> {
+    const today = dayjs(currentDate);
+    const upcomingMeetings: Meeting[] = [];
+
+    // 查找过去30天内创建的所有循环会议
+    const startDate = today.subtract(30, 'days');
+    const allDates: string[] = [];
+
+    for (let i = 0; i <= 30; i++) {
+      allDates.push(startDate.add(i, 'days').format('YYYY-MM-DD'));
+    }
+
+    // 收集所有循环会议
+    for (const date of allDates) {
+      const dayData = await WorkJournalStorage.get(date);
+      if (!dayData) continue;
+
+      for (const meeting of dayData.meetings) {
+        // 只处理未完成的循环会议
+        if (!meeting.recurrence || meeting.recurrence === 'none' || meeting.completed) {
+          continue;
+        }
+
+        const meetingTime = dayjs(meeting.time);
+        if (!meetingTime.isValid()) continue;
+
+        // 计算这个循环会议在当前日期的下一次时间
+        let nextOccurrence = meetingTime;
+
+        // 如果会议时间在当前日期之前，计算下一次发生时间
+        while (nextOccurrence.isBefore(today, 'day')) {
+          if (meeting.recurrence === 'daily') {
+            nextOccurrence = nextOccurrence.add(1, 'day');
+          } else if (meeting.recurrence === 'weekly') {
+            nextOccurrence = nextOccurrence.add(7, 'days');
+          } else if (meeting.recurrence === 'biweekly') {
+            nextOccurrence = nextOccurrence.add(14, 'days');
+          }
+        }
+
+        // 如果下一次发生时间是今天，且时间还没开始，添加到列表
+        if (nextOccurrence.format('YYYY-MM-DD') === currentDate) {
+          const now = dayjs();
+          const shouldShow = today.isAfter(now, 'day') || nextOccurrence.isAfter(now);
+
+          if (shouldShow) {
+            upcomingMeetings.push({
+              ...meeting,
+              id: generateId(), // 生成新ID，避免与原会议冲突
+              time: nextOccurrence.format('YYYY-MM-DD HH:mm'),
+              completed: false,
+            });
+          }
+        }
+      }
+    }
+
+    // 去重（根据会议名称和时间）
+    const uniqueMeetings = upcomingMeetings.filter((meeting, index, self) =>
+      index === self.findIndex((m) => m.name === meeting.name && m.time === meeting.time)
+    );
+
+    return uniqueMeetings;
+  }
 }

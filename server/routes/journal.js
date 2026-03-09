@@ -14,11 +14,12 @@ router.use(authenticateToken);
 router.get('/:date', (req, res) => {
   try {
     const { date } = req.params;
-    const userId = req.user.id; // 从认证中间件获取用户ID
+    const userId = parseInt(req.user.id); // 确保是整数
 
     const journal = db.getJournalByDate(userId, date);
 
     if (!journal) {
+      console.log(`[API] ${date} - 没有数据，返回空结构`);
       // 如果不存在，返回空数据结构
       return res.json({
         date,
@@ -34,6 +35,12 @@ router.get('/:date', (req, res) => {
       });
     }
 
+    // 打印返回的数据统计
+    console.log(`[API] ${date} - 返回数据:`);
+    console.log(`  会议: ${journal.meetings?.length || 0}`);
+    console.log(`  项目: ${(journal.projects?.inProgress?.length || 0) + (journal.projects?.delivered?.length || 0) + (journal.projects?.accepted?.length || 0)}`);
+    console.log(`  待办: ${journal.todos?.length || 0}`);
+
     res.json(journal);
   } catch (error) {
     console.error('Error getting journal:', error);
@@ -45,14 +52,14 @@ router.get('/:date', (req, res) => {
 router.post('/', (req, res) => {
   try {
     const journalData = req.body;
-    const userId = req.user.id; // 从认证中间件获取用户ID
+    const userId = parseInt(req.user.id); // 确保是整数
 
-    // 验证必需字段
     if (!journalData.date) {
       return res.status(400).json({ error: 'Date is required' });
     }
 
-    // 保存到数据库
+    console.log(`[API] 保存 ${journalData.date} 的数据`);
+
     const success = db.saveJournal(userId, journalData);
 
     if (success) {
@@ -61,7 +68,7 @@ router.post('/', (req, res) => {
       res.status(500).json({ error: 'Failed to save journal' });
     }
   } catch (error) {
-    console.error('Error saving journal:', error);
+    console.error('[API] 保存失败:', error);
     res.status(500).json({ error: 'Failed to save journal' });
   }
 });
