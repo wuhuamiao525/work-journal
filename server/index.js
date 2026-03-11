@@ -25,9 +25,14 @@ app.use((req, res, next) => {
 const db = require('./db');
 db.initDatabase();
 
+// 启动自动同步定时任务
+const autoSyncScheduler = require('./autoSyncScheduler');
+autoSyncScheduler.startScheduler();
+
 // 导入路由
 const authRoutes = require('./routes/auth');
 const journalRoutes = require('./routes/journal');
+const tasksRoutes = require('./routes/tasks');
 
 // 健康检查
 app.get('/health', (req, res) => {
@@ -37,6 +42,7 @@ app.get('/health', (req, res) => {
 // API 路由
 app.use('/api/auth', authRoutes);
 app.use('/api/journals', journalRoutes);
+app.use('/api/tasks', tasksRoutes);
 
 // 404 处理
 app.use((req, res) => {
