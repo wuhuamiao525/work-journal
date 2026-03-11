@@ -27,8 +27,8 @@ const loadUpcomingRecurringMeetings = async (currentDate: string) => {
   const today = dayjs(currentDate);
   const upcomingMeetings: any[] = [];
 
-  // 查找从今天往后30天内的所有未完成循环会议
-  for (let i = 0; i <= 30; i++) {
+  // 查找从今天往后14天内的所有未完成循环会议
+  for (let i = 0; i <= 14; i++) {
     const futureDate = today.add(i, 'days').format('YYYY-MM-DD');
     const futureData = await WorkJournalStorage.get(futureDate);
 
@@ -77,7 +77,7 @@ const WorkJournal: React.FC<WorkJournalProps> = ({ onLogout }) => {
         });
       }
 
-      // 加载未来的循环会议（从今天往后30天内）
+      // 加载未来的循环会议（从今天往后14天内）
       const upcomingRecurringMeetings = await loadUpcomingRecurringMeetings(currentDate);
       if (upcomingRecurringMeetings.length > 0) {
         console.log('[工作日记] 加载到未来循环会议:', upcomingRecurringMeetings.length, '个');

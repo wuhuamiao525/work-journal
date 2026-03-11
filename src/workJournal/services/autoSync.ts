@@ -33,6 +33,7 @@ export class AutoSyncService {
   /**
    * 检查是否需要同步
    * 条件：工作日 + 0点后（午夜开始） + 今日未同步过
+   * 智能判断：即使今天有部分数据，如果缺少重要数据（项目/待办），也需要同步
    */
   static async shouldSync(): Promise<boolean> {
     const now = dayjs();
@@ -57,43 +58,70 @@ export class AutoSyncService {
 
     console.log('[AutoSync] ✅ 今天是工作日');
 
-    // 检查今天是否有真实数据（有会议或待办或项目）
+    // 检查今天的数据情况
     const todayData = await WorkJournalStorage.get(today);
     console.log('[AutoSync] 今天的数据:', todayData ? '存在' : '不存在');
 
     if (todayData) {
-      const hasData =
-        todayData.meetings.length > 0 ||
-        todayData.todos.length > 0 ||
-        todayData.projects.inProgress.length > 0 ||
-        todayData.projects.delivered.length > 0 ||
-        todayData.projects.accepted.length > 0 ||
-        todayData.diary.trim() !== '';
+      const todayProjectCount =
+        todayData.projects.inProgress.length +
+        todayData.projects.delivered.length +
+        todayData.projects.accepted.length;
 
-      console.log('[AutoSync] 今天是否有真实数据:', hasData);
+      console.log('[AutoSync] 今天的数据详情:');
       console.log('[AutoSync] - 会议:', todayData.meetings.length);
+      console.log('[AutoSync] - 项目:', todayProjectCount);
       console.log('[AutoSync] - 待办:', todayData.todos.length);
-      console.log('[AutoSync] - 项目:', todayData.projects.inProgress.length + todayData.projects.delivered.length + todayData.projects.accepted.length);
 
-      if (hasData) {
+      // 检查上一个工作日是否有项目/待办数据
+      const previousWorkday = this.getPreviousWorkday(dayjs());
+      const previousData = await WorkJournalStorage.get(previousWorkday);
+
+      if (previousData) {
+        const previousProjectCount =
+          previousData.projects.inProgress.length +
+          previousData.projects.delivered.length +
+          previousData.projects.accepted.length;
+
+        const previousTodoCount = previousData.todos.length;
+
+        console.log('[AutoSync] 上一个工作日的数据:');
+        console.log('[AutoSync] - 项目:', previousProjectCount);
+        console.log('[AutoSync] - 待办:', previousTodoCount);
+
+        // 智能判断：如果今天缺少项目或待办，但昨天有，则需要同步
+        const needsSyncProjects = todayProjectCount === 0 && previousProjectCount > 0;
+        const needsSyncTodos = todayData.todos.length === 0 && previousTodoCount > 0;
+
+        if (needsSyncProjects || needsSyncTodos) {
+          console.log('[AutoSync] ✅ 今天缺少数据，需要同步');
+          console.log('[AutoSync] - 需要同步项目:', needsSyncProjects);
+          console.log('[AutoSync] - 需要同步待办:', needsSyncTodos);
+          this.lastCheckDate = today;
+          return true;
+        }
+      }
+
+      // 如果今天有完整数据（项目和待办都有），跳过同步
+      if (todayProjectCount > 0 || todayData.todos.length > 0) {
         this.lastCheckDate = today;
-        console.log('[AutoSync] ❌ 今天已有真实数据，跳过同步');
-        return false; // 今天有真实数据，无需同步
+        console.log('[AutoSync] ❌ 今天已有完整数据，跳过同步');
+        return false;
       }
     }
 
-    // 标记今天已检查，避免重复同步
-    this.lastCheckDate = today;
+    // 如果今天完全没有数据，需要同步
     console.log('[AutoSync] ✅ 满足同步条件');
+    this.lastCheckDate = today;
     return true;
   }
 
   /**
    * 执行同步（从上一个工作日复制数据）
    * 过滤规则：
-   * - 会议：只复制未完成的
-   * - 项目：全部复制
-   * - 待办：只复制未完成的任务，移除空项目
+   * - 会议：合并今天已有的 + 昨天未完成的（去重）
+   * - 项目：如果今天为空则复制昨天的，否则保留今天的
+   * - 待办：如果今天为空则复制昨天的，否则保留今天的
    * - 日记：不复制
    */
   static async syncFromPreviousDay(): Promise<DailyWorkJournal | null> {
@@ -129,8 +157,14 @@ export class AutoSyncService {
       return null; // 上一个工作日是空的，不同步空数据
     }
 
-    // 复制会议（只保留未完成的，保留循环设置，不复制会议纪要）
-    const meetings = previousData.meetings
+    // 获取今天已有的数据
+    const todayData = await WorkJournalStorage.get(today);
+
+    // 复制会议：合并今天已有的 + 昨天未完成的（去重）
+    let meetings = todayData?.meetings || [];
+    const existingMeetingKeys = new Set(meetings.map((m) => `${m.name}-${m.time}`));
+
+    const previousUncompletedMeetings = previousData.meetings
       .filter((m) => !m.completed)
       .map((m) => ({
         ...m,
@@ -139,56 +173,77 @@ export class AutoSyncService {
         recurrence: m.recurrence || 'none', // 保留循环设置
         minutes: '', // 会议纪要不复制，每个会议独立
         createdAt: new Date().toISOString(),
-      }));
+      }))
+      .filter((m) => !existingMeetingKeys.has(`${m.name}-${m.time}`)); // 去重
 
-    // 复制项目（全部复制）
-    const projects = {
-      inProgress: previousData.projects.inProgress.map((p) => ({
-        ...p,
-        id: generateId(),
-        createdAt: new Date().toISOString(),
-      })),
-      delivered: previousData.projects.delivered.map((p) => ({
-        ...p,
-        id: generateId(),
-        createdAt: new Date().toISOString(),
-      })),
-      accepted: previousData.projects.accepted.map((p) => ({
-        ...p,
-        id: generateId(),
-        createdAt: new Date().toISOString(),
-      })),
-    };
+    meetings = [...meetings, ...previousUncompletedMeetings];
+    console.log('[AutoSync] 会议合并: 今天已有', todayData?.meetings.length || 0, '个，新增', previousUncompletedMeetings.length, '个');
 
-    // 复制待办（只保留未完成的任务，保留计划完成时间）
-    const todos = previousData.todos
-      .map((todoProject) => {
-        const uncompletedTasks = todoProject.tasks
-          .filter((t) => !t.completed)
-          .map((t) => ({
-            ...t,
-            id: generateId(),
-            completed: false,
-            plannedDate: t.plannedDate, // 保留计划完成时间
-            createdAt: new Date().toISOString(),
-          }));
+    // 复制项目：如果今天为空则复制昨天的，否则保留今天的
+    let projects = todayData?.projects || { inProgress: [], delivered: [], accepted: [] };
+    const todayProjectCount =
+      projects.inProgress.length + projects.delivered.length + projects.accepted.length;
 
-        return {
-          ...todoProject,
+    if (todayProjectCount === 0) {
+      projects = {
+        inProgress: previousData.projects.inProgress.map((p) => ({
+          ...p,
           id: generateId(),
-          tasks: uncompletedTasks,
           createdAt: new Date().toISOString(),
-        };
-      })
-      .filter((tp) => tp.tasks.length > 0); // 移除没有任务的项目
+        })),
+        delivered: previousData.projects.delivered.map((p) => ({
+          ...p,
+          id: generateId(),
+          createdAt: new Date().toISOString(),
+        })),
+        accepted: previousData.projects.accepted.map((p) => ({
+          ...p,
+          id: generateId(),
+          createdAt: new Date().toISOString(),
+        })),
+      };
+      console.log('[AutoSync] 项目同步: 从昨天复制', previousData.projects.inProgress.length + previousData.projects.delivered.length + previousData.projects.accepted.length, '个项目');
+    } else {
+      console.log('[AutoSync] 项目保留: 今天已有', todayProjectCount, '个项目，不覆盖');
+    }
 
-    // 创建新数据
+    // 复制待办：如果今天为空则复制昨天的，否则保留今天的
+    let todos = todayData?.todos || [];
+
+    if (todos.length === 0) {
+      todos = previousData.todos
+        .map((todoProject) => {
+          const uncompletedTasks = todoProject.tasks
+            .filter((t) => !t.completed)
+            .map((t) => ({
+              ...t,
+              id: generateId(),
+              completed: false,
+              plannedDate: t.plannedDate, // 保留计划完成时间
+              createdAt: new Date().toISOString(),
+            }));
+
+          return {
+            ...todoProject,
+            id: generateId(),
+            tasks: uncompletedTasks,
+            createdAt: new Date().toISOString(),
+          };
+        })
+        .filter((tp) => tp.tasks.length > 0); // 移除没有任务的项目
+
+      console.log('[AutoSync] 待办同步: 从昨天复制', todos.length, '个待办项目');
+    } else {
+      console.log('[AutoSync] 待办保留: 今天已有', todos.length, '个待办项目，不覆盖');
+    }
+
+    // 创建合并后的数据
     const newData: DailyWorkJournal = {
       date: today,
       meetings,
       projects,
       todos,
-      diary: '', // 日记不复制
+      diary: todayData?.diary || '', // 保留今天的日记
       lastModified: new Date().toISOString(),
     };
 
@@ -196,6 +251,7 @@ export class AutoSyncService {
     await WorkJournalStorage.save(newData);
     this.lastCheckDate = today;
 
+    console.log('[AutoSync] ✅ 同步完成');
     return newData;
   }
 
