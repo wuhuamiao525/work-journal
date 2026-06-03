@@ -3,6 +3,8 @@ import { Modal, Form, Input, InputNumber, message, Row, Col } from 'antd';
 import type { Project } from '../types';
 import { generateId } from '../types';
 
+const { TextArea } = Input;
+
 interface ProjectModalProps {
   visible: boolean;
   project?: Project | null;
@@ -43,6 +45,8 @@ const ProjectModal: React.FC<ProjectModalProps> = (props) => {
         contact: values.contact || '',
         supplier: values.supplier || '',
         amount: values.amount || '',
+        notes: values.notes || undefined,
+        risks: values.risks || undefined,
         createdAt: project?.createdAt || new Date().toISOString(),
       };
       onFinish(newProject);
@@ -156,6 +160,22 @@ const ProjectModal: React.FC<ProjectModalProps> = (props) => {
           <Col span={12}>
             <Form.Item name="amount" label="金额">
               <Input placeholder="请输入金额" />
+            </Form.Item>
+          </Col>
+        </Row>
+
+        <Row gutter={16}>
+          <Col span={24}>
+            <Form.Item name="notes" label="项目备注">
+              <TextArea rows={3} placeholder="项目背景、关键约束、重要信息等" />
+            </Form.Item>
+          </Col>
+        </Row>
+
+        <Row gutter={16}>
+          <Col span={24}>
+            <Form.Item name="risks" label="风险点">
+              <TextArea rows={3} placeholder="当前已知风险、阻塞项、需关注事项" />
             </Form.Item>
           </Col>
         </Row>

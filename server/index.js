@@ -33,6 +33,7 @@ autoSyncScheduler.startScheduler();
 const authRoutes = require('./routes/auth');
 const journalRoutes = require('./routes/journal');
 const tasksRoutes = require('./routes/tasks');
+const aiRoutes = require('./routes/ai');
 
 // 健康检查
 app.get('/health', (req, res) => {
@@ -43,6 +44,7 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/journals', journalRoutes);
 app.use('/api/tasks', tasksRoutes);
+app.use('/api/ai', aiRoutes);
 
 // 404 处理
 app.use((req, res) => {

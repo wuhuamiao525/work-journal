@@ -8,32 +8,38 @@ export type MeetingRecurrence = 'none' | 'daily' | 'weekly' | 'biweekly';
 // 会议
 export interface Meeting {
   id: string;
-  name: string; // 会议名称
-  time: string; // 时间 (YYYY-MM-DD HH:mm)
-  location: string; // 地点
-  completed: boolean; // 是否完成
-  recurrence: MeetingRecurrence; // 循环类型：none-不循环, daily-每日循环, weekly-单周循环, biweekly-双周循环
-  minutes?: string; // 会议纪要（可选）
+  name: string;
+  time: string;
+  location: string;
+  completed: boolean;
+  recurrence: MeetingRecurrence;
+  minutes?: string;
+  projectName?: string;
+  tags?: string[];
+  attendees?: string[];   // 参与人
+  duration?: number;      // 时长（分钟）
   createdAt: string;
 }
 
-// 项目（14个字段）
+// 项目（14个字段 + 备注/风险）
 export interface Project {
   id: string;
-  index: number; // 编号
-  name: string; // 项目名称
-  nextDelivery: string; // 下一个交付节点
-  tester: string; // 测试人员
-  engineEngineer: string; // 工程引擎人员
-  developer: string; // 研发人员
-  engineDeveloper: string; // 工程开发人员
-  hardwareLeader: string; // 硬件负责人
-  productManager: string; // 产品人员
-  pm: string; // PM
-  business: string; // 商务
-  contact: string; // 对接人
-  supplier: string; // 供应商
-  amount: string; // 金额
+  index: number;
+  name: string;
+  nextDelivery: string;
+  tester: string;
+  engineEngineer: string;
+  developer: string;
+  engineDeveloper: string;
+  hardwareLeader: string;
+  productManager: string;
+  pm: string;
+  business: string;
+  contact: string;
+  supplier: string;
+  amount: string;
+  notes?: string;   // 项目备注
+  risks?: string;   // 风险点
   createdAt: string;
 }
 
@@ -47,14 +53,31 @@ export interface ProjectCollection {
   accepted: Project[]; // 已验收项目
 }
 
+// 任务优先级
+export type TaskPriority = 'high' | 'medium' | 'low';
+
+// 子任务
+export interface SubTask {
+  id: string;
+  content: string;
+  completed: boolean;
+}
+
 // 待办任务
 export interface TodoTask {
   id: string;
   content: string;
   completed: boolean;
-  plannedDate?: string; // 计划完成时间 (YYYY-MM-DD)
-  progress?: string; // 任务进展记录
+  plannedDate?: string;
+  progress?: string;
   createdAt: string;
+  completedAt?: string;
+  assignee?: string;
+  priority?: TaskPriority;
+  tags?: string[];
+  estimatedHours?: number;  // 预计工时（小时）
+  actualHours?: number;     // 实际工时（小时）
+  subtasks?: SubTask[];     // 子任务列表
 }
 
 // 待办项目
@@ -79,3 +102,27 @@ export interface DailyWorkJournal {
 export const generateId = (): string => {
   return `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 };
+
+// 标签配置（存 localStorage，支持自定义颜色）
+export interface TagConfig {
+  name: string;    // 标签名（唯一 key）
+  color: string;   // Ant Design 预设色名 或 hex，如 'blue'/'#ff4d4f'
+}
+
+// 看板排序持久化（存 localStorage）
+// taskKey = `${task.content}__${task.projectName}`
+export interface KanbanOrder {
+  byStatus: {
+    todo: string[];
+    inprogress: string[];
+    overdue: string[];
+    done: string[];
+  };
+  byPriority: {
+    high: string[];
+    medium: string[];
+    low: string[];
+    none: string[];
+  };
+  updatedAt: string; // ISO timestamp
+}

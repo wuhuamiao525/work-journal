@@ -1,17 +1,104 @@
+/* Collapse header */
 .ant-collapse-header {
-  font-size: 16px;
-  font-weight: 500;
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  padding: 14px 16px !important;
 }
 
 .ant-collapse-content-box {
-  padding: 24px;
+  padding: 20px 24px !important;
 }
 
+/* Collapse item spacing */
+.ant-collapse-item {
+  margin-bottom: 4px;
+}
+
+/* Table styles */
 .ant-table {
   font-size: 14px;
 }
 
 .ant-table-thead > tr > th {
-  background: #fafafa;
   font-weight: 600;
 }
+
+/* Task item hover effect (pure CSS, zero JS overhead) */
+.task-item {
+  border-radius: 6px;
+  padding: 4px 8px !important;
+  transition: background 0.15s ease;
+}
+
+.task-item:hover {
+  background: rgba(0, 0, 0, 0.02) !important;
+}
+
+/* Project card hover effect */
+.project-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.10) !important;
+}
+
+/* Segmented control refinement */
+.ant-segmented {
+  border-radius: 8px !important;
+}
+
+/* Smooth layout transitions */
+.ant-card {
+  transition: box-shadow 0.2s ease !important;
+}
+
+/* ====== react-calendar-heatmap color scale ====== */
+.react-calendar-heatmap .color-empty {
+  fill: #ebedf0;
+}
+.react-calendar-heatmap .color-scale-1 {
+  fill: #9be9a8;
+}
+.react-calendar-heatmap .color-scale-2 {
+  fill: #40c463;
+}
+.react-calendar-heatmap .color-scale-3 {
+  fill: #30a14e;
+}
+.react-calendar-heatmap .color-scale-4 {
+  fill: #216e39;
+}
+
+/* Dark mode overrides for heatmap */
+@media (prefers-color-scheme: dark) {
+  .react-calendar-heatmap .color-empty {
+    fill: #2d333b;
+  }
+  .react-calendar-heatmap .color-scale-1 {
+    fill: #0e4429;
+  }
+  .react-calendar-heatmap .color-scale-2 {
+    fill: #006d32;
+  }
+  .react-calendar-heatmap .color-scale-3 {
+    fill: #26a641;
+  }
+  .react-calendar-heatmap .color-scale-4 {
+    fill: #39d353;
+  }
+}
+
+/* Dark mode for body[data-theme="dark"] */
+body[data-theme="dark"] .react-calendar-heatmap .color-empty {
+  fill: #2d333b;
+}
+body[data-theme="dark"] .react-calendar-heatmap .color-scale-1 {
+  fill: #0e4429;
+}
+body[data-theme="dark"] .react-calendar-heatmap .color-scale-2 {
+  fill: #006d32;
+}
+body[data-theme="dark"] .react-calendar-heatmap .color-scale-3 {
+  fill: #26a641;
+}
+body[data-theme="dark"] .react-calendar-heatmap .color-scale-4 {
+  fill: #39d353;
+}
+

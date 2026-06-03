@@ -137,19 +137,20 @@ async function executeAutoSync() {
       console.log('  ✅ 项目: 保留今天的', todayProjectCount, '个');
     }
 
-    // 待办：如果今天为空则复制昨天的（只保留未完成的任务）
+    // 待办：如果今天为空则复制昨天的（只保留未完成的任务，保留plannedDate等所有字段）
     let finalTodos = todayData?.todos || [];
 
     if (todayTodoCount === 0 && yesterdayTodoCount > 0) {
       finalTodos = (yesterdayData.todos || []).map(todoProject => {
         return {
           ...todoProject,
+          // filter保留未完成的任务，所有字段（包括plannedDate）都会保留
           tasks: (todoProject.tasks || []).filter(task => !task.completed)
         };
       }).filter(todoProject => todoProject.tasks.length > 0);
 
       const taskCount = finalTodos.reduce((sum, tp) => sum + tp.tasks.length, 0);
-      console.log('  ✅ 待办: 从昨天复制', finalTodos.length, '个项目,', taskCount, '个任务');
+      console.log('  ✅ 待办: 从昨天复制', finalTodos.length, '个项目,', taskCount, '个任务（保留plannedDate）');
     } else {
       console.log('  ✅ 待办: 保留今天的', todayTodoCount, '个');
     }

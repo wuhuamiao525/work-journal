@@ -47,7 +47,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         maxWidth: '400px',
       }}>
         <div style={{ textAlign: 'center', marginBottom: '30px' }}>
-          <Title level={2} style={{ margin: 0 }}>每日工作日记</Title>
+          <Title level={2} style={{ margin: 0 }}>日迹</Title>
           <p style={{ color: '#666', marginTop: '8px' }}>请登录您的账号</p>
         </div>
 

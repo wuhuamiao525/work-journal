@@ -1,19 +1,40 @@
 import React, { useState } from 'react';
-import { Button, Space, Popconfirm, message, Table, Tabs } from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
+import { Button, Space, Popconfirm, message, Table, Tabs, Alert, theme as antTheme } from 'antd';
+import { PlusOutlined, ArrowRightOutlined, EyeOutlined } from '@ant-design/icons';
 import type { Project, ProjectStatus, ProjectCollection } from '../types';
 import ProjectModal from '../modals/ProjectModal';
+import ProjectDetailDrawer from './ProjectDetailDrawer';
 
 interface ProjectSectionProps {
   projects: ProjectCollection;
   onChange: (projects: ProjectCollection) => void;
 }
 
+const labelMap: Record<ProjectStatus, string> = {
+  inProgress: '进行中的项目',
+  delivered: '已交付的项目',
+  accepted: '已验收项目',
+};
+
+const moveTargetMap: Partial<Record<ProjectStatus, ProjectStatus>> = {
+  inProgress: 'delivered',
+  delivered: 'accepted',
+};
+
 const ProjectSection: React.FC<ProjectSectionProps> = (props) => {
   const { projects, onChange } = props;
+  const { token } = antTheme.useToken();
   const [activeTab, setActiveTab] = useState<ProjectStatus>('inProgress');
   const [modalVisible, setModalVisible] = useState(false);
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
+  const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
+  const [detailProject, setDetailProject] = useState<Project | null>(null);
+  const [detailDrawerVisible, setDetailDrawerVisible] = useState(false);
+
+  const handleViewDetail = (project: Project) => {
+    setDetailProject(project);
+    setDetailDrawerVisible(true);
+  };
 
   const handleAdd = () => {
     setCurrentProject(null);
@@ -44,6 +65,31 @@ const ProjectSection: React.FC<ProjectSectionProps> = (props) => {
     onChange(newProjects);
     setModalVisible(false);
     setCurrentProject(null);
+  };
+
+  // 移动单个项目到目标状态
+  const handleMoveTo = (project: Project, to: ProjectStatus) => {
+    const newProjects = { ...projects };
+    newProjects[activeTab] = newProjects[activeTab].filter((p) => p.id !== project.id);
+    newProjects[to] = [...newProjects[to], project];
+    onChange(newProjects);
+    message.success(`已移动到「${labelMap[to]}」`);
+  };
+
+  // 批量移动到目标状态
+  const handleBatchMoveTo = (to: ProjectStatus) => {
+    const newProjects = { ...projects };
+    const moving = newProjects[activeTab].filter((p) => selectedRowKeys.includes(p.id));
+    newProjects[activeTab] = newProjects[activeTab].filter((p) => !selectedRowKeys.includes(p.id));
+    newProjects[to] = [...newProjects[to], ...moving];
+    onChange(newProjects);
+    setSelectedRowKeys([]);
+    message.success(`已将 ${moving.length} 个项目移动到「${labelMap[to]}」`);
+  };
+
+  const handleTabChange = (key: string) => {
+    setActiveTab(key as ProjectStatus);
+    setSelectedRowKeys([]);
   };
 
   const columns = [
@@ -136,76 +182,108 @@ const ProjectSection: React.FC<ProjectSectionProps> = (props) => {
     {
       title: '操作',
       key: 'action',
-      width: 150,
+      width: 200,
       fixed: 'right' as const,
-      render: (_: any, record: Project) => (
-        <Space>
-          <a onClick={() => handleEdit(record)}>编辑</a>
-          <Popconfirm
-            title="确定删除这个项目吗？"
-            onConfirm={() => handleDelete(record)}
-            okText="确定"
-            cancelText="取消"
-          >
-            <a style={{ color: 'red' }}>删除</a>
-          </Popconfirm>
-        </Space>
-      ),
+      render: (_: any, record: Project) => {
+        const moveTarget = moveTargetMap[activeTab];
+        return (
+          <Space>
+            <a onClick={() => handleViewDetail(record)}>
+              <EyeOutlined /> 详情
+            </a>
+            <a onClick={() => handleEdit(record)}>编辑</a>
+            {moveTarget && (
+              <a
+                style={{ color: token.colorPrimary }}
+                onClick={() => handleMoveTo(record, moveTarget)}
+              >
+                <ArrowRightOutlined /> {labelMap[moveTarget].replace('的项目', '').replace('项目', '')}
+              </a>
+            )}
+            <Popconfirm
+              title="确定删除这个项目吗？"
+              onConfirm={() => handleDelete(record)}
+              okText="确定"
+              cancelText="取消"
+            >
+              <a style={{ color: token.colorError }}>删除</a>
+            </Popconfirm>
+          </Space>
+        );
+      },
     },
   ];
+
+  const rowSelection = {
+    selectedRowKeys,
+    onChange: (keys: React.Key[]) => setSelectedRowKeys(keys as string[]),
+  };
+
+  const renderTable = (dataSource: Project[]) => (
+    <Table
+      columns={columns}
+      dataSource={dataSource}
+      rowKey="id"
+      pagination={false}
+      scroll={{ x: 1900 }}
+      rowSelection={rowSelection}
+    />
+  );
 
   const tabItems = [
     {
       key: 'inProgress',
-      label: '进行中的项目',
-      children: (
-        <Table
-          columns={columns}
-          dataSource={projects.inProgress}
-          rowKey="id"
-          pagination={false}
-          scroll={{ x: 1800 }}
-        />
-      ),
+      label: `进行中的项目 (${projects.inProgress.length})`,
+      children: renderTable(projects.inProgress),
     },
     {
       key: 'delivered',
-      label: '已交付的项目',
-      children: (
-        <Table
-          columns={columns}
-          dataSource={projects.delivered}
-          rowKey="id"
-          pagination={false}
-          scroll={{ x: 1800 }}
-        />
-      ),
+      label: `已交付的项目 (${projects.delivered.length})`,
+      children: renderTable(projects.delivered),
     },
     {
       key: 'accepted',
-      label: '已验收项目',
-      children: (
-        <Table
-          columns={columns}
-          dataSource={projects.accepted}
-          rowKey="id"
-          pagination={false}
-          scroll={{ x: 1800 }}
-        />
-      ),
+      label: `已验收项目 (${projects.accepted.length})`,
+      children: renderTable(projects.accepted),
     },
   ];
 
+  const moveTarget = moveTargetMap[activeTab];
+
   return (
     <>
-      <div style={{ marginBottom: 16 }}>
+      <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
         <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
           新建项目
         </Button>
+        {selectedRowKeys.length > 0 && moveTarget && (
+          <Alert
+            type="info"
+            style={{ padding: '4px 12px', flex: 1 }}
+            message={
+              <Space>
+                <span>已选 <strong>{selectedRowKeys.length}</strong> 个项目</span>
+                <Popconfirm
+                  title={`确定将 ${selectedRowKeys.length} 个项目移动到「${labelMap[moveTarget]}」吗？`}
+                  onConfirm={() => handleBatchMoveTo(moveTarget)}
+                  okText="确定移动"
+                  cancelText="取消"
+                >
+                  <Button size="small" type="primary" icon={<ArrowRightOutlined />}>
+                    批量移动到{labelMap[moveTarget].replace('的项目', '').replace('项目', '')}
+                  </Button>
+                </Popconfirm>
+                <Button size="small" onClick={() => setSelectedRowKeys([])}>
+                  取消选择
+                </Button>
+              </Space>
+            }
+          />
+        )}
       </div>
       <Tabs
         activeKey={activeTab}
-        onChange={(key) => setActiveTab(key as ProjectStatus)}
+        onChange={handleTabChange}
         items={tabItems}
       />
       <ProjectModal
@@ -216,6 +294,15 @@ const ProjectSection: React.FC<ProjectSectionProps> = (props) => {
           setCurrentProject(null);
         }}
         onFinish={handleModalFinish}
+      />
+      <ProjectDetailDrawer
+        project={detailProject}
+        projectStatus={detailProject ? activeTab : null}
+        visible={detailDrawerVisible}
+        onClose={() => {
+          setDetailDrawerVisible(false);
+          setDetailProject(null);
+        }}
       />
     </>
   );

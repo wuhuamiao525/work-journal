@@ -159,6 +159,29 @@ function getJournalByDate(userId, date) {
 
 // 保存或更新工作日志
 function saveJournal(userId, journalData) {
+  // 自动修复已完成任务的completedAt字段
+  const fixedTodos = (journalData.todos || []).map(todoProject => {
+    const fixedTasks = (todoProject.tasks || []).map(task => {
+      // 如果任务已完成但没有completedAt字段，补充完成时间
+      if (task.completed && !task.completedAt) {
+        // 获取昨天的日期时间
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayDate = yesterday.toISOString().split('T')[0];
+        return {
+          ...task,
+          completedAt: `${yesterdayDate} 18:00:00`
+        };
+      }
+      return task;
+    });
+
+    return {
+      ...todoProject,
+      tasks: fixedTasks
+    };
+  });
+
   const stmt = db.prepare(`
     INSERT INTO work_journals (user_id, date, meetings, projects, todos, diary, last_modified)
     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -175,7 +198,7 @@ function saveJournal(userId, journalData) {
     journalData.date,
     JSON.stringify(journalData.meetings),
     JSON.stringify(journalData.projects),
-    JSON.stringify(journalData.todos),
+    JSON.stringify(fixedTodos), // 使用修复后的todos
     journalData.diary,
     journalData.lastModified
   );

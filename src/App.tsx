@@ -1,15 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import { ConfigProvider, theme } from 'antd';
+import zhCN from 'antd/locale/zh_CN';
 import WorkJournal from './workJournal';
 import LoginPage from './auth/LoginPage';
 import { AuthService } from './auth/AuthService';
+import { useTheme } from './hooks/useTheme';
 import './App.css';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const { themeMode, toggleTheme } = useTheme();
 
   useEffect(() => {
-    // 检查是否已登录
     const authenticated = AuthService.isAuthenticated();
     setIsAuthenticated(authenticated);
     setIsLoading(false);
@@ -25,17 +28,38 @@ function App() {
   };
 
   if (isLoading) {
-    return null; // 或者显示一个加载指示器
-  }
-
-  if (!isAuthenticated) {
-    return <LoginPage onLoginSuccess={handleLoginSuccess} />;
+    return null;
   }
 
   return (
-    <div className="App">
-      <WorkJournal onLogout={handleLogout} />
-    </div>
+    <ConfigProvider
+      locale={zhCN}
+      theme={{
+        algorithm: themeMode === 'dark' ? theme.darkAlgorithm : theme.defaultAlgorithm,
+        token: {
+          borderRadius: 8,
+          borderRadiusLG: 12,
+          fontFamily: "'PingFang SC', 'HarmonyOS Sans', -apple-system, 'Segoe UI', sans-serif",
+        },
+        components: {
+          Card: {
+            headerBg: 'transparent',
+          },
+          Collapse: {
+            headerBg: 'transparent',
+          },
+          Table: {
+            cellPaddingBlock: 10,
+          },
+        },
+      }}
+    >
+      {!isAuthenticated ? (
+        <LoginPage onLoginSuccess={handleLoginSuccess} />
+      ) : (
+        <WorkJournal onLogout={handleLogout} themeMode={themeMode} onToggleTheme={toggleTheme} />
+      )}
+    </ConfigProvider>
   );
 }
 
